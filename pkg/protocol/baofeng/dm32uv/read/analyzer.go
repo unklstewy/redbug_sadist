@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 
-	"github.com/unklstewy/redbug_pulitzer/pkg/reporting"
 	"github.com/unklstewy/redbug_sadist/pkg/protocol"
 	"github.com/unklstewy/redbug_sadist/pkg/protocol/analyzer"
 	"github.com/unklstewy/redbug_sadist/pkg/utils"
@@ -24,33 +24,6 @@ type localCommunication struct {
 	Length       int
 	CommandType  string
 	Notes        string
-}
-
-// Local CommandAPI type to be converted to protocol.CommandAPI
-type CommandAPI struct {
-	Command        string
-	HexValue       string
-	ASCIIValue     string
-	Description    string
-	ResponseType   string
-	ResponseHex    string
-	ResponseASCII  string
-	FrequencyCount int
-	TimingAverage  string
-}
-
-// AnalysisReport holds the complete analysis data
-type AnalysisReport struct {
-	TotalCommunications int
-	CommandCount        int
-	ResponseCount       int
-	HandshakeSequences  []protocol.CommandResponse
-	CommandResponses    []protocol.CommandResponse
-	UniqueCommands      map[string]int
-	FileDescriptors     map[string]string
-	GeneratedAt         string
-	Vendor              string
-	Model               string
 }
 
 // DM32UVReadAnalyzer implements the analyzer interface for Baofeng DM-32UV read operations
@@ -89,34 +62,20 @@ func (a *DM32UVReadAnalyzer) Analyze(filename string) error {
 	// Generate analysis report
 	report := a.generateAnalysisReport(communications, cmdResponses)
 
-	// Define vendor and model
-	vendor := "baofeng"
-	model := "dm32uv"
-
-	// Generate analysis report HTML
-	reportFilename := "dm32uv_read_analysis.html"
-	analysisReportPath := reporting.GetReportPath(vendor, model, reporting.ReportTypeReadAnalysis, reportFilename)
-	a.generateHTMLReport(report, analysisReportPath)
+	// Generate HTML report
+	a.generateHTMLReport(report)
 
 	// Generate API documentation
-	apiDocs := a.convertToProtocolAPICommands(a.generateCommandAPIDocumentation(cmdResponses))
-	apiDocsFilename := "dm32uv_read_api_docs.html"
-	apiDocsPath := reporting.GetReportPath(vendor, model, reporting.ReportTypeReadAPI, apiDocsFilename)
-	reporting.GenerateAPIDocHTML(apiDocs, apiDocsFilename, reporting.ReadMode, vendor, model)
+	apiCommands := a.convertToProtocolAPICommands(cmdResponses)
+	a.generateCommandAPIDocumentation(apiCommands)
 
-	fmt.Printf("\nAnalysis complete! Generated reports:\n")
-	fmt.Printf("- Analysis report: %s\n", analysisReportPath)
-	fmt.Printf("- API documentation: %s\n", apiDocsPath)
+	fmt.Printf("\nAnalysis complete!\n")
 
 	return nil
 }
 
-// The rest of the implementation for parseStraceFile, analyzeCommandResponses, etc.
-// continues with the existing methods from the original implementation...
-
 // parseStraceFile parses a strace log file and extracts communications
 func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunication {
-	// Existing implementation from main.go
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("Error opening file: %v", err)
@@ -126,60 +85,63 @@ func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunicati
 	var communications []localCommunication
 	scanner := bufio.NewScanner(file)
 
-	// Regex patterns for different types of communications
-	writeRegex := regexp.MustCompile(`(\d{2}:\d{2}:\d{2}\.\d{6})\s+write\((\d+),\s*"([^"]*)"`)
-	readRegex := regexp.MustCompile(`(\d{2}:\d{2}:\d{2}\.\d{6})\s+read\((\d+),\s*"([^"]*)"`)
+	// A single regex to match both read/write lines with optional "..." and capturing the entire string:
+	logRegex := regexp.MustCompile(`(?i)^(\d+)\s+(\d{2}:\d{2}:\d{2}\.\d{6})\s+(read|write)\((\d+),\s*"([^"]*)(?:\.\.\.)?",\s*(\d+)\)\s*=\s*(\d+)`)
 
-	lineNum := 0
 	for scanner.Scan() {
 		line := scanner.Text()
-		lineNum++
 
-		// Check for write operations (PC → Radio commands)
-		if matches := writeRegex.FindStringSubmatch(line); len(matches) >= 4 {
-			data := utils.UnescapeString(matches[3])
-			if len(data) > 0 {
+		// Skip hex dumps
+		if strings.HasPrefix(line, " | ") {
+			continue
+		}
+
+		matches := logRegex.FindStringSubmatch(line)
+		if len(matches) == 8 {
+			pid := matches[1]
+			timestamp := matches[2]
+			op := matches[3] // "read" or "write"
+			fileDesc := matches[4]
+			dataStr := matches[5] // captured content in quotes
+			//lengthStr := matches[6]
+			_ = matches[7] // actual bytes read/written
+
+			data := utils.UnescapeString(dataStr)
+			if op == "write" {
 				comm := localCommunication{
-					Timestamp:    matches[1],
+					Timestamp:    timestamp,
 					Direction:    "PC→Radio",
-					FileDesc:     matches[2],
+					FileDesc:     fileDesc,
 					RawHex:       hex.EncodeToString(data),
 					DecodedASCII: utils.DecodeToASCII(data),
 					Length:       len(data),
 					CommandType:  a.identifyCommandType(data),
+					Notes:        fmt.Sprintf("PID:%s", pid),
 				}
 				communications = append(communications, comm)
-			}
-		}
-
-		// Check for read operations (Radio → PC responses)
-		if matches := readRegex.FindStringSubmatch(line); len(matches) >= 4 {
-			data := utils.UnescapeString(matches[3])
-			if len(data) > 0 {
+			} else {
 				comm := localCommunication{
-					Timestamp:    matches[1],
+					Timestamp:    timestamp,
 					Direction:    "Radio→PC",
-					FileDesc:     matches[2],
+					FileDesc:     fileDesc,
 					RawHex:       hex.EncodeToString(data),
 					DecodedASCII: utils.DecodeToASCII(data),
 					Length:       len(data),
 					CommandType:  a.identifyResponseType(data),
+					Notes:        fmt.Sprintf("PID:%s", pid),
 				}
 				communications = append(communications, comm)
 			}
+		} else {
+			fmt.Printf("No match: %s\n", line)
 		}
 	}
 
 	return communications
 }
 
-// Add the rest of the method implementations from the original main.go,
-// but modify them to be methods on DM32UVReadAnalyzer.
-// Make sure to update any function calls to use the a. prefix for methods.
-
-// Example:
+// identifyCommandType determines the type of command based on the data
 func (a *DM32UVReadAnalyzer) identifyCommandType(data []byte) string {
-	// Original implementation from main.go
 	if len(data) == 0 {
 		return "Empty"
 	}
@@ -210,10 +172,16 @@ func (a *DM32UVReadAnalyzer) identifyCommandType(data []byte) string {
 		return "Packet Frame (~)"
 	default:
 		if firstByte >= 0x20 && firstByte <= 0x7E {
-			return fmt.Sprintf("ASCII Command '%c' (0x%02X)", firstByte, firstByte)
+			return fmt.Sprintf("ASCII Command (%c)", firstByte)
 		}
-		return fmt.Sprintf("Binary Command (0x%02X)", firstByte)
+		return fmt.Sprintf("Unknown (0x%02X)", firstByte)
 	}
 }
 
-// Continue with all the other methods similarly...
+// Note: The following methods are implemented in analyzer_impl.go:
+// - identifyResponseType
+// - analyzeCommandResponses
+// - generateAnalysisReport
+// - generateHTMLReport
+// - convertToProtocolAPICommands
+// - generateCommandAPIDocumentation
