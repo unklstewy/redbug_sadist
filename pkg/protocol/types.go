@@ -1,0 +1,135 @@
+package protocol
+
+import (
+	"time"
+)
+
+// Direction constants for radio communication
+const (
+	DirectionToRadio   = "WRITE"
+	DirectionFromRadio = "READ"
+)
+
+// Standard protocol bytes
+const (
+	STX = 0x02 // Start of Text
+	ETX = 0x03 // End of Text
+	EOT = 0x04 // End of Transmission
+	ACK = 0x06 // Acknowledge
+	NAK = 0x15 // Negative Acknowledge
+	SOH = 0x01 // Start of Heading
+)
+
+// Communication represents a single communication event
+type Communication struct {
+	// Basic metadata
+	Timestamp string
+	Direction string // "READ" or "WRITE"
+	FileDesc  string // File descriptor from strace
+
+	// Data content
+	RawHex       string // Original hex bytes
+	DecodedASCII string // Human-readable ASCII where possible
+	Length       int    // Length in bytes
+
+	// Analysis fields
+	CommandType string // Identified command type
+	Notes       string // Additional observations
+}
+
+// CommandResponse represents a matched command and response pair
+type CommandResponse struct {
+	SequenceID  int           // Order in the capture
+	Command     Communication // The command sent
+	Response    Communication // The response received
+	TimeDelta   string        // Time between command and response
+	IsHandshake bool          // Whether this is a handshake sequence
+	Description string        // Human-readable description
+}
+
+// ReportInfo holds metadata about generated reports
+type ReportInfo struct {
+	Path    string    // File path
+	Size    int64     // File size in bytes
+	ModTime time.Time // Last modification time
+}
+
+// CommandAPI represents a documented API command
+type CommandAPI struct {
+	Command        string // Command type identifier
+	HexValue       string // Raw hex representation
+	ASCIIValue     string // ASCII representation
+	Description    string // Human-readable description
+	ResponseType   string // Type of response
+	ResponseHex    string // Raw hex of response
+	ResponseASCII  string // ASCII of response
+	FrequencyCount int    // Number of times observed
+	TimingAverage  string // Average response time
+	DataCategory   string // For write operations: data category
+	SuccessRate    string // Percentage of successful responses
+}
+
+// HandshakeSequence represents a protocol handshake pattern
+type HandshakeSequence struct {
+	StartIndex  int      // Starting index in overall communication
+	EndIndex    int      // Ending index
+	Description string   // Description of handshake
+	Commands    []string // Command identifiers
+	Responses   []string // Response identifiers
+	SuccessRate float64  // Success rate percentage
+	AverageTime string   // Average time to complete handshake
+	Occurrences int      // Number of times this pattern occurs
+}
+
+// DataBlock represents a block of data in communications
+type DataBlock struct {
+	StartIndex  int    // Starting index in communications
+	EndIndex    int    // Ending index
+	Size        int    // Block size in bytes
+	Description string // Description of data block
+	Category    string // Data category (config, channels, etc)
+	ContentType string // Content type if identifiable
+}
+
+// ProgrammingBlock represents a block of programming data (write ops)
+type ProgrammingBlock struct {
+	BlockNumber    int    // Sequence number of block
+	StartAddress   string // Starting memory address
+	Size           int    // Block size in bytes
+	Description    string // Block description if identified
+	Category       string // Data category (config, channels, etc)
+	CommandIndices []int  // Indices of commands in this block
+}
+
+// AnalysisReport holds the complete analysis results
+type AnalysisReport struct {
+	Filename           string
+	GeneratedAt        string
+	CommandCount       int
+	ResponseCount      int
+	Communications     []Communication
+	CommandResponses   []CommandResponse
+	HandshakeSequences []HandshakeSequence
+	DataBlocks         []DataBlock
+	ProgrammingBlocks  []ProgrammingBlock // For write operations
+	Anomalies          []string           // Unexpected or error events
+}
+
+// OperationMode indicates whether we're analyzing read or write operations
+type OperationMode int
+
+const (
+	ReadMode OperationMode = iota
+	WriteMode
+)
+
+// ProtocolVersion identifies the radio protocol version
+type ProtocolVersion string
+
+const (
+	ProtocolUnknown ProtocolVersion = "Unknown"
+	ProtocolDM32UV  ProtocolVersion = "DM-32UV"
+	ProtocolBF888S  ProtocolVersion = "BF-888S"
+	ProtocolUV5R    ProtocolVersion = "UV-5R"
+	ProtocolCustom  ProtocolVersion = "Custom"
+)
