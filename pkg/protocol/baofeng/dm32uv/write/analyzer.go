@@ -1,4 +1,4 @@
-package read
+package write
 
 import (
 	"bufio"
@@ -11,93 +11,63 @@ import (
 
 	"github.com/unklstewy/redbug_sadist/pkg/protocol"
 	"github.com/unklstewy/redbug_sadist/pkg/protocol/analyzer"
-	"github.com/unklstewy/redbug_sadist/pkg/protocol/baofeng/dm32uv/dm32uv_commands/read_commands"
+	"github.com/unklstewy/redbug_sadist/pkg/protocol/baofeng/dm32uv/common"
+	"github.com/unklstewy/redbug_sadist/pkg/protocol/baofeng/dm32uv/dm32uv_commands/write_commands"
 	"github.com/unklstewy/redbug_sadist/pkg/utils"
 )
 
-// This type can be used locally for parsing, then converted to protocol.Communication
-type localCommunication struct {
-	Timestamp    string
-	Direction    string
-	FileDesc     string
-	RawHex       string
-	DecodedASCII string
-	Length       int
-	CommandType  string
-	Notes        string
-}
-
-func (a *DM32UVReadAnalyzer) identifyCommand(data []byte) string {
-	if cmdName, found := read_commands.FindMatchingCommand(data); found {
-		return cmdName
+// NewDM32UVWriteAnalyzer creates a new analyzer for the DM-32UV radio write operations
+func NewDM32UVWriteAnalyzer(config Config) *DM32UVWriteAnalyzer {
+	return &DM32UVWriteAnalyzer{
+		Config: config,
 	}
-	return "Unknown Command"
-}
-
-// DM32UVReadAnalyzer is the analyzer for Baofeng DM-32UV read operations
-type DM32UVReadAnalyzer struct {
-	// Add any configuration fields here
-}
-
-// NewDM32UVReadAnalyzer creates a new analyzer for the DM-32UV radio
-func NewDM32UVReadAnalyzer() *DM32UVReadAnalyzer {
-	return &DM32UVReadAnalyzer{}
 }
 
 // Initialize the analyzer by registering it
 func init() {
-	analyzer.RegisterAnalyzer(&DM32UVReadAnalyzer{})
+	// Create a default configuration
+	defaultConfig := Config{
+		Debug:     false,
+		OutputDir: "",
+	}
+	// Create and register the analyzer with default config
+	analyzer.RegisterAnalyzer(NewDM32UVWriteAnalyzer(defaultConfig))
 }
 
 // GetInfo returns metadata about this analyzer
-func (a *DM32UVReadAnalyzer) GetInfo() analyzer.AnalyzerInfo {
+func (a *DM32UVWriteAnalyzer) GetInfo() analyzer.AnalyzerInfo {
 	return analyzer.AnalyzerInfo{
 		Vendor: "baofeng",
 		Model:  "dm32uv",
-		Modes:  "read",
+		Modes:  "write",
 	}
 }
 
 // Analyze performs the full analysis workflow on a trace file
-func (a *DM32UVReadAnalyzer) Analyze(filename string) error {
-	fmt.Printf("Baofeng DM-32UV Read Operation Protocol Analyzer\n")
-	fmt.Printf("=============================================\n")
-	fmt.Printf("Analyzing file: %s\n\n", filename)
+func (a *DM32UVWriteAnalyzer) Analyze(filename string) (*protocol.AnalysisResult, error) {
+	log.Printf("Analyzing file: %s with DM32UVWriteAnalyzer", filename)
 
-	communications := a.parseStraceFile(filename)
-	if len(communications) == 0 {
-		return fmt.Errorf("no communications found in the strace file")
+	// Parse the strace file to extract communications
+	comms, err := a.parseStraceFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse strace file: %w", err)
 	}
 
-	fmt.Printf("Found %d communications\n", len(communications))
+	// Process and analyze the communications
+	result := a.analyzeCommandResponses(comms)
 
-	// Analyze command-response pairs
-	cmdResponses := a.analyzeCommandResponses(communications)
-
-	// Generate analysis report
-	report := a.generateAnalysisReport(communications, cmdResponses)
-
-	// Generate HTML report
-	a.generateHTMLReport(report)
-
-	// Generate API documentation
-	apiCommands := a.convertToProtocolAPICommands(cmdResponses)
-	a.generateCommandAPIDocumentation(apiCommands)
-
-	fmt.Printf("\nAnalysis complete!\n")
-
-	return nil
+	return result, nil
 }
 
 // parseStraceFile parses a strace log file and extracts communications
-func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunication {
+func (a *DM32UVWriteAnalyzer) parseStraceFile(filename string) ([]common.Communication, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		log.Fatalf("Error opening file: %v", err)
+		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
 
-	var communications []localCommunication
+	var communications []common.Communication
 	scanner := bufio.NewScanner(file)
 
 	// A single regex to match both read/write lines with optional "..." and capturing the entire string:
@@ -123,7 +93,7 @@ func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunicati
 
 			data := utils.UnescapeString(dataStr)
 			if op == "write" {
-				comm := localCommunication{
+				comm := common.Communication{
 					Timestamp:    timestamp,
 					Direction:    "PC→Radio",
 					FileDesc:     fileDesc,
@@ -135,7 +105,7 @@ func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunicati
 				}
 				communications = append(communications, comm)
 			} else {
-				comm := localCommunication{
+				comm := common.Communication{
 					Timestamp:    timestamp,
 					Direction:    "Radio→PC",
 					FileDesc:     fileDesc,
@@ -152,11 +122,11 @@ func (a *DM32UVReadAnalyzer) parseStraceFile(filename string) []localCommunicati
 		}
 	}
 
-	return communications
+	return communications, nil
 }
 
 // identifyCommandType determines the type of command based on the data
-func (a *DM32UVReadAnalyzer) identifyCommandType(data []byte) string {
+func (a *DM32UVWriteAnalyzer) identifyCommandType(data []byte) string {
 	if len(data) == 0 {
 		return "Empty"
 	}
@@ -197,6 +167,27 @@ func (a *DM32UVReadAnalyzer) identifyCommandType(data []byte) string {
 		}
 		return fmt.Sprintf("Unknown (0x%02X)", firstByte)
 	}
+}
+
+// identifyCommand identifies the command based on the binary data
+func (a *DM32UVWriteAnalyzer) identifyCommand(data []byte) string {
+	// Check if it's a known command from the write commands package
+	if len(data) > 0 {
+		// For write commands, typically they start with 0x57 (ASCII 'W')
+		if len(data) > 0 && data[0] == 0x57 {
+			// Try to find a matching command in our defined commands
+			cmdName, found := write_commands.FindMatchingCommand(data)
+			if found {
+				return cmdName
+			}
+
+			// If not found, but still looks like a write command, return a generic name
+			return fmt.Sprintf("Write Command 0x%02X", data[1])
+		}
+	}
+
+	// Return unknown if we couldn't identify it
+	return "Unknown Write Command"
 }
 
 // Note: The following methods are implemented in analyzer_impl.go:

@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestDM32UVReadAnalyzer_AnalyzeCommandResponses(t *testing.T) {
+func TestDM32UVReadAnalyzer_AnalyzeCommandResponsePairs(t *testing.T) {
 	analyzer := &DM32UVReadAnalyzer{}
 
 	// Create sample communications
