@@ -1,0 +1,351 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DM-32UV Read Protocol API Documentation</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #2980b9; text-align: center; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; }
+        
+         
+        .command-card { 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            margin-bottom: 15px; 
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .command-header { 
+            background-color: #f8f8f8; 
+            padding: 12px; 
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+        .command-name { font-size: 18px; font-weight: bold; color: #2980b9; }
+        .command-meta { display: flex; gap: 15px; font-size: 13px; color: #666; }
+        .command-body { padding: 0 15px 15px; }
+        
+         
+        details { margin: 10px 0; }
+        details summary { 
+            cursor: pointer; 
+            padding: 8px; 
+            background-color: #f9f9f9; 
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        details[open] summary { margin-bottom: 10px; }
+        
+         
+        .response-container { 
+            background-color: #eaf2f8; 
+            padding: 10px; 
+            border-left: 4px solid #3498db; 
+            margin: 10px 0; 
+            border-radius: 4px;
+        }
+        
+         
+        .hex { 
+            font-family: 'Courier New', monospace; 
+            background-color: #f8f9fa; 
+            padding: 4px 8px; 
+            border-radius: 3px; 
+            overflow-wrap: break-word;
+            word-break: break-all;
+        }
+        .ascii { 
+            font-family: 'Courier New', monospace; 
+            color: #d35400; 
+            overflow-wrap: break-word;
+            word-break: break-all;
+        }
+        .description { color: #555; font-style: italic; }
+        .field-label { font-weight: bold; color: #555; display: inline-block; width: 120px; }
+        
+         
+        .timing { color: #8e44ad; font-weight: bold; }
+        .category { 
+            display: inline-block; 
+            background-color: #f8f9fa; 
+            padding: 2px 6px; 
+            border-radius: 3px; 
+            font-size: 12px; 
+            color: #7f8c8d; 
+        }
+        .success-rate { font-weight: bold; }
+        .success-high { color: #27ae60; }
+        .success-medium { color: #f39c12; }
+        .success-low { color: #c0392b; }
+        
+         
+        .search-container {
+            background-color: #eaf2f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .search-input {
+            padding: 10px;
+            width: 70%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .search-type {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        .index-link {
+            display: inline-block;
+            margin-top: 10px;
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .index-link:hover {
+            text-decoration: underline;
+        }
+        #command-count {
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        .no-results {
+            padding: 20px;
+            text-align: center;
+            font-style: italic;
+            color: #555;
+            display: none;
+        }
+        
+         
+        .quick-nav {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            max-width: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .quick-nav h4 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .quick-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .quick-nav a {
+            display: block;
+            padding: 3px 0;
+            text-decoration: none;
+            color: #2980b9;
+            font-size: 13px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .quick-nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📥 Read Protocol API Documentation</h1>
+        
+        <div class="search-container">
+            <input type="text" id="search-input" class="search-input" placeholder="Search commands...">
+            <select id="search-type" class="search-type">
+                <option value="all">All Fields</option>
+                <option value="command">Command Name</option>
+                <option value="hex">HEX Value</option>
+                <option value="ascii">ASCII Value</option>
+                <option value="category">Category</option>
+            </select>
+            <span id="command-count">Showing 1 commands</span>
+            <br>
+            <a href="/index.html" class="index-link">← Back to Index</a>
+        </div>
+        
+        <div class="quick-nav" id="quick-nav">
+            <h4>Quick Navigation</h4>
+            <ul id="nav-list">
+                
+                <li><a href="#cmd-0">CMD_</a></li>
+                
+            </ul>
+        </div>
+
+        <div id="command-list">
+            
+            <div class="command-card" id="cmd-0" data-command="CMD_" data-hex="" data-ascii="" data-category="read">
+                <div class="command-header" onclick="toggleCommandDetails(this)">
+                    <div class="command-name">CMD_</div>
+                    <div class="command-meta">
+                        
+                        <span class="category">read</span>
+                        
+                        
+                        <span class="success-rate success-high">100%</span>
+                        
+                        <span class="timing">100ms</span>
+                        <span class="frequency">282×</span>
+                    </div>
+                </div>
+                
+                <div class="command-body" style="display:none;">
+                    <details>
+                        <summary>Command Details</summary>
+                        <div>
+                            <p><span class="field-label">Description:</span> <span class="description">Read operation for CMD_</span></p>
+                            <p><span class="field-label">HEX:</span> <span class="hex"></span></p>
+                            <p><span class="field-label">ASCII:</span> <span class="ascii"></span></p>
+                        </div>
+                    </details>
+                    
+                    <details>
+                        <summary>Response Details</summary>
+                        <div class="response-container">
+                            <p><strong>Empty</strong></p>
+                            <p><span class="field-label">HEX:</span> <span class="hex"></span></p>
+                            <p><span class="field-label">ASCII:</span> <span class="ascii"></span></p>
+                        </div>
+                    </details>
+                    
+                    <details>
+                        <summary>Performance Metrics</summary>
+                        <p><span class="field-label">Average Time:</span> <span class="timing">100ms</span></p>
+                        <p><span class="field-label">Usage Count:</span> <span class="frequency">282 times</span></p>
+                        
+                        <p><span class="field-label">Success Rate:</span> <span class="success-rate success-high">100%</span></p>
+                        
+                    </details>
+                </div>
+            </div>
+            
+            
+            <div class="no-results" id="no-results">
+                No commands match your search.
+            </div>
+        </div>
+        
+        <div style="margin-top: 50px; text-align: center; color: #7f8c8d; border-top: 1px solid #bdc3c7; padding-top: 20px;">
+            <p>Generated by DM-32UV Protocol Analyzer | Read Protocol API Documentation | Generated: 2025-06-12 15:35:02</p>
+        </div>
+    </div>
+
+    <script>
+        
+        function toggleCommandDetails(header) {
+            const body = header.nextElementSibling;
+            body.style.display = body.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        
+        const searchInput = document.getElementById('search-input');
+        const searchType = document.getElementById('search-type');
+        const commandList = document.getElementById('command-list');
+        const commandCount = document.getElementById('command-count');
+        const noResults = document.getElementById('no-results');
+        
+        function performSearch() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const searchField = searchType.value;
+            let visibleCount = 0;
+            
+            const commandCards = document.querySelectorAll('.command-card');
+            commandCards.forEach(card => {
+                let match = false;
+                
+                if (searchTerm === '') {
+                    match = true;
+                } else {
+                    switch(searchField) {
+                        case 'command':
+                            match = card.dataset.command.toLowerCase().includes(searchTerm);
+                            break;
+                        case 'hex':
+                            match = card.dataset.hex.toLowerCase().includes(searchTerm);
+                            break;
+                        case 'ascii':
+                            match = card.dataset.ascii.toLowerCase().includes(searchTerm);
+                            break;
+                        case 'category':
+                            match = card.dataset.category && card.dataset.category.toLowerCase().includes(searchTerm);
+                            break;
+                        case 'all':
+                        default:
+                            match = card.dataset.command.toLowerCase().includes(searchTerm) ||
+                                   card.dataset.hex.toLowerCase().includes(searchTerm) ||
+                                   card.dataset.ascii.toLowerCase().includes(searchTerm) ||
+                                   (card.dataset.category && card.dataset.category.toLowerCase().includes(searchTerm));
+                            break;
+                    }
+                }
+                
+                card.style.display = match ? 'block' : 'none';
+                if (match) visibleCount++;
+            });
+            
+            commandCount.textContent = 'Showing ' + visibleCount + ' of 1 commands';
+            noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+            
+            
+            updateQuickNav();
+        }
+        
+        
+        function updateQuickNav() {
+            const navList = document.getElementById('nav-list');
+            navList.innerHTML = '';
+            
+            const visibleCommands = document.querySelectorAll('.command-card[style="display: block"]');
+            visibleCommands.forEach(cmd => {
+                const id = cmd.id;
+                const name = cmd.querySelector('.command-name').textContent;
+                
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#' + id;
+                a.textContent = name;
+                li.appendChild(a);
+                navList.appendChild(li);
+            });
+        }
+        
+        searchInput.addEventListener('input', performSearch);
+        searchType.addEventListener('change', performSearch);
+        
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            const firstCommand = document.querySelector('.command-card');
+            if (firstCommand) {
+                const header = firstCommand.querySelector('.command-header');
+                const body = header.nextElementSibling;
+                body.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
