@@ -146,6 +146,12 @@ func (a *DM32UVReadAnalyzer) identifyCommandType(data []byte) string {
 		return "Empty"
 	}
 
+	// First try to identify using our command database
+	if cmdName := a.identifyCommand(data); cmdName != "Unknown Command" {
+		return cmdName
+	}
+
+	// Fall back to generic identification based on first byte
 	firstByte := data[0]
 
 	// Common DMR/Baofeng command patterns
